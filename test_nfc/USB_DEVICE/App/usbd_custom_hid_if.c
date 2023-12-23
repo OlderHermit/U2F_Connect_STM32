@@ -249,7 +249,7 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				while(communications_failed_attemts < NFC_SEND_RETRIES){
 					int uidSize = Read_Passive_Target(uid);
 					if (uidSize != 0){
-						size_t tmp_response_data_size = In_Data_Exchange(send_data, send_data_size, response_data, response_data_size);
+						size_t tmp_response_data_size = In_Data_Exchange(send_data, send_data_size, response_data, response_data_size, &hidStruct);
 
 						if(tmp_response_data_size != 0 /*&& tmp_response_data_size >= 9*/){
 							//response_data_size = tmp_response_data_size - 3;//removing 10 00 ff added by PN532

@@ -28,6 +28,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "usbd_customhid.h"
+#include "fido_u2f_hid.h"
 
 /* USER CODE BEGIN INCLUDE */
 #include <stdbool.h>
@@ -53,11 +54,12 @@
   */
 
 /* USER CODE BEGIN EXPORTED_DEFINES */
-#define TYPE_INIT 			0x80
+//#define TYPE_INIT 			0x80
 //#define U2FHID_VENDOR_FIRST (TYPE_INIT | 0x40)  // First vendor defined command
 //#define U2FHID_VENDOR_LAST  (TYPE_INIT | 0x7f)  // Last vendor defined command
 
 //used for data inside MSG hid frame
+ /*
 enum U2FISO7816_Command{
 	U2FISO7816_REGISTER = 0x01,
 	U2FISO7816_AUTHENTICATE = 0x02,
@@ -65,6 +67,7 @@ enum U2FISO7816_Command{
 };
 
 //used for hid communication frame
+
 enum U2FHID_Command
 {
 	U2FHID_NONE = 0x00,
@@ -86,7 +89,7 @@ typedef struct _HidStruct{
 } HidStruct;
 
 static uint8_t AID[] = {0xF0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
-static uint8_t NFC_SEND_RETRIES = 5;
+static uint8_t NFC_SEND_RETRIES = 5;*/
 /* USER CODE END EXPORTED_DEFINES */
 
 /**

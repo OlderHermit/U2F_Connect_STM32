@@ -133,6 +133,7 @@ int Read_Frame_Awaiting(uint8_t* frame, size_t size){
 			printf("Unable to read data size = 0\r\n");
 			return HAL_ERROR;
 		}
+		//add check of sum?
 	}
 	return HAL_OK;
 }
@@ -248,12 +249,13 @@ int Read_Passive_Target(uint8_t* uid){
 
 }
 
-int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t response_size){
+int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t response_size, HidStruct* hid_data){
 	uint8_t inDataExchange[size + 2];
 	uint8_t read_frame[256];
 	uint16_t read_size = 0;
 	uint8_t first = 1;
 	uint8_t remaining = 0;
+	uint8_t number_of_expected_packets = 0;
 
 	inDataExchange[0] = PN532_HOST_CODE;
 	inDataExchange[1] = PN532_COMMAND_INDATAEXCHANGE;
@@ -262,18 +264,27 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 	uint8_t frameToSend[sizeof(inDataExchange) + 7];
 	Make_Frame_For_Send(inDataExchange, sizeof(inDataExchange), frameToSend, sizeof(frameToSend));
 
+	//frame for continue // potential ton of mistakes //7 + aid added by func 7 - data size
+	uint8_t frameToSend_rest[16 + sizeof(AID) + 7];
+	Make_Frame_For_Send_Rest(number_of_expected_packets - remaining, frameToSend_rest, sizeof(frameToSend_rest), hid_data);
+	//end ot ton of mistakes
+
+
 	HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)PN532_I2C_ADDRESS, frameToSend, sizeof(frameToSend), HAL_MAX_DELAY);
 	HAL_Delay(500);
 	while(first == 1 || remaining > 0){//timeout needed
 
 		//continue
-		//HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)PN532_I2C_ADDRESS, frameToSend, sizeof(frameToSend), HAL_MAX_DELAY);
-		//HAL_Delay(500);
+		if(first == 0){
+			HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)PN532_I2C_ADDRESS, frameToSend_rest, sizeof(frameToSend_rest), HAL_MAX_DELAY);
+			HAL_Delay(500);
+		}
 		Read_Frame_Awaiting(read_frame, sizeof(read_frame));
 		for(int i = 0; i < 13; i++){
 			printf("%02x ", read_frame[i]);
 		}
 		printf("\r\n");
+
 		if (read_frame[6] != 0xD5) {
 			printf("Invalid frame identifier\r\n");
 			return 0;
@@ -298,20 +309,43 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 			return read_frame[4];
 		}
 		if (first == 1){
-			remaining = read_frame[14] - 1;
+			number_of_expected_packets = read_frame[14];
+			remaining = number_of_expected_packets - 1;
 			first = 0;
 			memcpy(response + read_size, read_frame + 14, (response[4]-2) * sizeof(uint8_t));
 			read_size += read_frame[4];
+			//data check and potential re request
 			printf("waiting for next part of data, expect %d more \r\n", remaining);
 		} else {
 			remaining--;
 			memcpy(response + read_size, read_frame + 13, (response[4]-2) * sizeof(uint8_t));
 			read_size += read_frame[4];
+			//data check and potential re request
 			printf("waiting for next part of data\r\n");
 		}
 	}
 	printf("multiple part data finished %d packets remaining\r\n", remaining);
 	return read_size;
+}
+
+void Make_Frame_For_Send_Rest(uint8_t packet_index, uint8_t* frameToSend_rest, size_t frameToSend_rest_size, HidStruct* hid_data){
+	uint8_t* send_rest_frame_NFC = malloc((7 + 7) * sizeof(uint8_t) + sizeof(AID));
+	uint8_t send_rest_data[3+4];
+	send_rest_data[0] = 0x00;
+	send_rest_data[1] = 0x04;
+	send_rest_data[2] = packet_index;
+	send_rest_data[3] = hid_data->ChannelId[0];
+	send_rest_data[4] = hid_data->ChannelId[1];
+	send_rest_data[5] = hid_data->ChannelId[2];
+	send_rest_data[6] = hid_data->ChannelId[3];
+
+	size_t send_rest_frame_NFC_size = Make_Packet_To_Send_NFC(send_rest_data, sizeof(send_rest_data), send_rest_frame_NFC);
+	uint8_t inDataExchange_rest[send_rest_frame_NFC_size + 2];
+	inDataExchange_rest[0] = PN532_HOST_CODE;
+	inDataExchange_rest[1] = PN532_COMMAND_INDATAEXCHANGE;
+	memcpy(inDataExchange_rest + 2, send_rest_frame_NFC, send_rest_frame_NFC_size * sizeof(uint8_t));
+
+	Make_Frame_For_Send(inDataExchange_rest, sizeof(inDataExchange_rest), frameToSend_rest, frameToSend_rest_size);
 }
 /*
 int Mifare_Auth(uint8_t* uid, size_t uid_size, int block_number){

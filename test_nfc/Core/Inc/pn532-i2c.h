@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include "fido_u2f_hid.h"
 #include "stm32l4xx_hal.h"
 
 //#define PRINT_DEBUG
@@ -107,7 +108,7 @@ void Get_Firmware_Version(void);
 
 int Read_Passive_Target(uint8_t* uid);
 
-int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t response_size);
+int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t response_size, HidStruct* hid_data);
 
 int Mifare_Auth(uint8_t* uid, size_t uid_size, int block_number);
 
