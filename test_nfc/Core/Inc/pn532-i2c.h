@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
 #include "fido_u2f_hid.h"
 #include "stm32l4xx_hal.h"
 
@@ -98,6 +100,8 @@ size_t Make_Frame_For_Send(uint8_t* data, size_t size, uint8_t* output, size_t o
 
 size_t Make_Frame_For_Send_Big(uint8_t* data, size_t size, uint8_t* output, size_t output_size);
 
+void Make_Frame_For_Send_Rest(uint8_t packet_index, uint8_t* frameToSend_rest, size_t frameToSend_rest_size);
+
 int Read_Frame(uint8_t* frame, size_t size);
 
 int Read_Frame_Awaiting(uint8_t* frame, size_t size);
@@ -108,7 +112,7 @@ void Get_Firmware_Version(void);
 
 int Read_Passive_Target(uint8_t* uid);
 
-int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t response_size, HidStruct* hid_data);
+int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t response_size);
 
 int Mifare_Auth(uint8_t* uid, size_t uid_size, int block_number);
 
@@ -124,7 +128,7 @@ void In_Jump_For_Dep(void);
 
 void Set_Parameters(uint8_t flags);
 
-
+bool Is_Checksum_Correct(uint8_t* data);
 
 
 

@@ -242,32 +242,37 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 
 			//cannot be extracted to function i2c receive breaks stm32
 			if(response_data_size != 0){
-				uint8_t* send_data = malloc((hidStruct.expectedSize + 7) * sizeof(uint8_t) + sizeof(AID));
+				uint8_t* send_data = malloc((hidStruct.expectedSize + 11) * sizeof(uint8_t) + sizeof(AID));
 				uint8_t uid[7];
 				uint8_t communications_failed_attemts = 0;
 				size_t send_data_size = Make_Packet_To_Send_NFC(cashe, hidStruct.expectedSize, send_data);
 				while(communications_failed_attemts < NFC_SEND_RETRIES){
 					int uidSize = Read_Passive_Target(uid);
 					if (uidSize != 0){
-						size_t tmp_response_data_size = In_Data_Exchange(send_data, send_data_size, response_data, response_data_size, &hidStruct);
+						size_t tmp_response_data_size = In_Data_Exchange(send_data, send_data_size, response_data, response_data_size);
 
 						if(tmp_response_data_size != 0 /*&& tmp_response_data_size >= 9*/){
 							//response_data_size = tmp_response_data_size - 3;//removing 10 00 ff added by PN532
 							//memmove(response_data, response_data + 9, response_data_size * sizeof(uint8_t));
 							//add code checking
 							//response_data_size = tmp_response_data_size;
+							if(tmp_response_data_size < 0){
+								printf("NFC error code detected, aborting\r\n");
+								break;
+							}
 							for(int i = 0; i < response_data_size; i++){
 								printf("%02x ", response_data[i]);
 							}
 							printf("\r\n");
 							break;
 						}
-						printf("something went wrong\r\n");
+						printf("something went wrong will request re send\r\n");
 						for(int i = 0; i < 30; i++){
 							printf("%02x ", response_data[i]);
 						}
 						printf("\r\n");
 						communications_failed_attemts++;
+						//change data to request just re-send if that was communication error (not NFC code)
 					}
 					printf("mobile not found\r\n");
 				}
@@ -338,14 +343,6 @@ static int8_t USBD_CUSTOM_HID_SendReport_FS(uint8_t* report, size_t len)
 /* USER CODE END 7 */
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
-static void Print_Packet(uint8_t* data){
-	printf("Packet received: \r\n");
-	for(int i = 0; i < 64; i++){
-		printf("%02X ", data[i]);
-	}
-	printf("\r\n");
-}
-
 size_t Parce_Hid_Packet(uint8_t* data, uint8_t* output){
 	int howMuchData = 0;
 	bool checkIfItIsInit = (data[4] & 0x80);//all commands starts with 0b1xxxxxxx
@@ -426,8 +423,12 @@ size_t Make_Packet_To_Send_NFC(uint8_t* data, size_t data_size, uint8_t* respons
 	response_data[4] = 0x00;
 	response_data[5] = sizeof(AID)/sizeof(uint8_t);
 	memcpy(response_data + 6, AID, sizeof(AID)/sizeof(uint8_t));
-	memcpy(response_data + 6 + sizeof(AID)/sizeof(uint8_t), data, data_size * sizeof(uint8_t));
-	response_data[6 + sizeof(AID)/sizeof(uint8_t) + data_size] = 0x00;
+	response_data[6 + sizeof(AID)/sizeof(uint8_t)] = hidStruct.ChannelId[0];
+	response_data[6 + sizeof(AID)/sizeof(uint8_t) + 1] = hidStruct.ChannelId[1];
+	response_data[6 + sizeof(AID)/sizeof(uint8_t) + 2] = hidStruct.ChannelId[2];
+	response_data[6 + sizeof(AID)/sizeof(uint8_t) + 3] = hidStruct.ChannelId[3];
+	memcpy(response_data + 6 + 4 + sizeof(AID)/sizeof(uint8_t), data, data_size * sizeof(uint8_t));
+	response_data[6 + 4 + sizeof(AID)/sizeof(uint8_t) + data_size] = 0x00;
 
 	return (hidStruct.expectedSize + 7) + sizeof(AID)/sizeof(uint8_t);
 }

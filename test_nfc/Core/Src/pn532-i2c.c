@@ -25,11 +25,6 @@ size_t Make_Frame_For_Send(uint8_t* data, size_t size, uint8_t* output, size_t o
 	output[0] = PN532_PREAMBLE;
 	output[1] = PN532_STARTCODE1;
 	output[2] = PN532_STARTCODE2;
-
-	for (uint8_t i = 0; i < 3; i++) {
-		checksum += output[i];
-	}
-
 	output[3] = size & 0xFF;
 	output[4] = (~size + 1) & 0xFF;
 
@@ -63,10 +58,6 @@ size_t Make_Frame_For_Send_Big(uint8_t* data, size_t size, uint8_t* output, size
 	output[6] = size & 0xFF;
 	output[7] = (~size + 1) & 0xFF;
 
-	for (uint8_t i = 0; i < 3; i++) {
-		checksum += output[i];
-	}
-
 	for (uint8_t i = 0; i < size; i++) {
 		output[8 + i] = data[i];
 		checksum += data[i];
@@ -97,7 +88,7 @@ int Check_For_ACK(void){
 
 int Read_Frame(uint8_t* frame, size_t size){
 	HAL_StatusTypeDef result;
-	HAL_Delay(50);
+	HAL_Delay(150);
 	if (Check_For_ACK() != HAL_OK){
 		return HAL_ERROR;
 	}
@@ -249,11 +240,12 @@ int Read_Passive_Target(uint8_t* uid){
 
 }
 
-int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t response_size, HidStruct* hid_data){
+int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t response_size){
 	uint8_t inDataExchange[size + 2];
 	uint8_t read_frame[256];
 	uint16_t read_size = 0;
 	uint8_t first = 1;
+	bool resend = false;
 	uint8_t remaining = 0;
 	uint8_t number_of_expected_packets = 0;
 
@@ -264,10 +256,8 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 	uint8_t frameToSend[sizeof(inDataExchange) + 7];
 	Make_Frame_For_Send(inDataExchange, sizeof(inDataExchange), frameToSend, sizeof(frameToSend));
 
-	//frame for continue // potential ton of mistakes //7 + aid added by func 7 - data size
+	//frame for continue //11 + AID - NFC wrap, 2 - PN532 command, 3 - data size, 7 - PN532 wrap
 	uint8_t frameToSend_rest[16 + sizeof(AID) + 7];
-	Make_Frame_For_Send_Rest(number_of_expected_packets - remaining, frameToSend_rest, sizeof(frameToSend_rest), hid_data);
-	//end ot ton of mistakes
 
 
 	HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)PN532_I2C_ADDRESS, frameToSend, sizeof(frameToSend), HAL_MAX_DELAY);
@@ -275,34 +265,35 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 	while(first == 1 || remaining > 0){//timeout needed
 
 		//continue
-		if(first == 0){
+		 if(first == 0 || resend){
+			Make_Frame_For_Send_Rest(number_of_expected_packets - remaining, frameToSend_rest, sizeof(frameToSend_rest));
 			HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)PN532_I2C_ADDRESS, frameToSend_rest, sizeof(frameToSend_rest), HAL_MAX_DELAY);
 			HAL_Delay(500);
 		}
 		Read_Frame_Awaiting(read_frame, sizeof(read_frame));
-		for(int i = 0; i < 13; i++){
-			printf("%02x ", read_frame[i]);
-		}
-		printf("\r\n");
 
 		if (read_frame[6] != 0xD5) {
 			printf("Invalid frame identifier\r\n");
-			return 0;
-		}
-
-		if (read_frame[7] != 0x41) {
+			resend = true;
+			continue;
+		} else if (read_frame[7] != 0x41) {
 			printf("Invalid command code\r\n");
-			return 0;
-		}
-
-		if (read_frame[8] != 0x00) {
+			resend = true;
+			continue;
+		} else if (read_frame[8] != 0x00) {
 			printf("Invalid command status got %02x\r\n", read_frame[8]);
-			return 0;
-		}
-		if (read_frame[read_frame[4] + 6 - 2] != 0x90 || read_frame[read_frame[4] + 6 - 1] != 0x00){
+			resend = true;
+			continue;
+		} else if (read_frame[read_frame[4] + 6 - 2] != 0x90 || read_frame[read_frame[4] + 6 - 1] != 0x00){
 			printf("Invalid NFC response status\r\n");
 			return 0;
 		}
+
+		if(!Is_Checksum_Correct(read_frame)){
+			resend = true;
+			continue;
+		}
+
 		if (first == 1 && read_frame[14] == 0x01){
 			memcpy(response, read_frame + 14, (read_frame[4]-2) * sizeof(uint8_t));
 			printf("single part data finished\r\n");
@@ -314,13 +305,11 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 			first = 0;
 			memcpy(response + read_size, read_frame + 14, (response[4]-2) * sizeof(uint8_t));
 			read_size += read_frame[4];
-			//data check and potential re request
 			printf("waiting for next part of data, expect %d more \r\n", remaining);
 		} else {
 			remaining--;
 			memcpy(response + read_size, read_frame + 13, (response[4]-2) * sizeof(uint8_t));
 			read_size += read_frame[4];
-			//data check and potential re request
 			printf("waiting for next part of data\r\n");
 		}
 	}
@@ -328,16 +317,12 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 	return read_size;
 }
 
-void Make_Frame_For_Send_Rest(uint8_t packet_index, uint8_t* frameToSend_rest, size_t frameToSend_rest_size, HidStruct* hid_data){
-	uint8_t* send_rest_frame_NFC = malloc((7 + 7) * sizeof(uint8_t) + sizeof(AID));
-	uint8_t send_rest_data[3+4];
+void Make_Frame_For_Send_Rest(uint8_t packet_index, uint8_t* frameToSend_rest, size_t frameToSend_rest_size){
+	uint8_t* send_rest_frame_NFC = malloc((3 + 11) * sizeof(uint8_t) + sizeof(AID));
+	uint8_t send_rest_data[3];
 	send_rest_data[0] = 0x00;
 	send_rest_data[1] = 0x04;
 	send_rest_data[2] = packet_index;
-	send_rest_data[3] = hid_data->ChannelId[0];
-	send_rest_data[4] = hid_data->ChannelId[1];
-	send_rest_data[5] = hid_data->ChannelId[2];
-	send_rest_data[6] = hid_data->ChannelId[3];
 
 	size_t send_rest_frame_NFC_size = Make_Packet_To_Send_NFC(send_rest_data, sizeof(send_rest_data), send_rest_frame_NFC);
 	uint8_t inDataExchange_rest[send_rest_frame_NFC_size + 2];
@@ -346,6 +331,23 @@ void Make_Frame_For_Send_Rest(uint8_t packet_index, uint8_t* frameToSend_rest, s
 	memcpy(inDataExchange_rest + 2, send_rest_frame_NFC, send_rest_frame_NFC_size * sizeof(uint8_t));
 
 	Make_Frame_For_Send(inDataExchange_rest, sizeof(inDataExchange_rest), frameToSend_rest, frameToSend_rest_size);
+}
+
+//for time being only for normal frames
+bool Is_Checksum_Correct(uint8_t* data){
+	uint8_t checksum = 0;
+	if(data[4] + data[5] != 0x00){
+		printf("length error\r\n");
+		return false;
+	}
+	for(int i = 0; i < data[4]; i++){
+		checksum += data[6 + i];
+	}
+	if(checksum + data[6 + data[4]] != 0x00){
+		printf("checksum error\r\n");
+		return false;
+	}
+	return true;
 }
 /*
 int Mifare_Auth(uint8_t* uid, size_t uid_size, int block_number){
