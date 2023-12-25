@@ -28,6 +28,10 @@ size_t Make_Frame_For_Send(uint8_t* data, size_t size, uint8_t* output, size_t o
 	output[3] = size & 0xFF;
 	output[4] = (~size + 1) & 0xFF;
 
+	for (uint8_t i = 0; i < 3; i++) {
+		checksum += output[i];
+	}
+
 	for (uint8_t i = 0; i < size; i++) {
 		output[5 + i] = data[i];
 		checksum += data[i];
@@ -57,6 +61,10 @@ size_t Make_Frame_For_Send_Big(uint8_t* data, size_t size, uint8_t* output, size
 	output[5] = (size >> 8) & 0xFF;
 	output[6] = size & 0xFF;
 	output[7] = (~size + 1) & 0xFF;
+
+	for (uint8_t i = 0; i < 3; i++) {
+		checksum += output[i];
+	}
 
 	for (uint8_t i = 0; i < size; i++) {
 		output[8 + i] = data[i];
