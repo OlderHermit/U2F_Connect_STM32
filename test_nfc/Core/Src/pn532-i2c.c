@@ -11,11 +11,13 @@ extern I2C_HandleTypeDef hi2c1;
 uint8_t PN532_ACK_RESPONSE[] = {0x01, 0x00, 0x00, 0xFF, 0x00, 0xFF};
 
 size_t Make_Frame_For_Send(uint8_t* data, size_t size, uint8_t* output, size_t output_size){
-	uint8_t checksum = 0;
+	int checksum = 0;
 
-	if (size + 7 > PN532_FRAME_MAX_LENGTH || size < 1) {
-		printf("Too much data making extended frame\r\n");
-		return Make_Frame_For_Send_Big(data, size, output, output_size); // Data must be array of 1 to 255 bytes.
+	if (size + 7 > PN532_FRAME_MAX_LENGTH) {
+		printf("Too much data for a frame got %d\r\n", size);
+		return 0;
+		//printf("Too much data making extended frame\r\n");
+		//return Make_Frame_For_Send_Big(data, size, output, output_size); // Data must be array of 1 to 255 bytes.
 	}
 	if (output_size < size + 7) {
 		printf("Frame size was too small\r\n");
@@ -28,21 +30,18 @@ size_t Make_Frame_For_Send(uint8_t* data, size_t size, uint8_t* output, size_t o
 	output[3] = size & 0xFF;
 	output[4] = (~size + 1) & 0xFF;
 
-	for (uint8_t i = 0; i < 3; i++) {
-		checksum += output[i];
-	}
-
 	for (uint8_t i = 0; i < size; i++) {
 		output[5 + i] = data[i];
 		checksum += data[i];
 	}
-	output[size + 5] = ~checksum & 0xFF;
+	output[size + 5] = (~checksum + 1) & 0xFF;
 	output[size + 6] = PN532_POSTAMBLE;
 	return size + 7;
 }
 
+//appears to does not work -> splicing data into less packets //internal buffer will return error over 264 bytes // messages over 180 are likely to return 0x0b error
 size_t Make_Frame_For_Send_Big(uint8_t* data, size_t size, uint8_t* output, size_t output_size){
-	uint8_t checksum = 0;
+	int checksum = 0;
 
 	if (size + 10 > PN532_FRAME_MAX_LENGTH * 257 || size < 1) {
 		printf("Too much data for extended frame\r\n");
@@ -60,17 +59,13 @@ size_t Make_Frame_For_Send_Big(uint8_t* data, size_t size, uint8_t* output, size
 	output[4] = 0xFF;
 	output[5] = (size >> 8) & 0xFF;
 	output[6] = size & 0xFF;
-	output[7] = (~size + 1) & 0xFF;
+	output[7] = (~(output[5] + output[6]) + 1) & 0xFF;
 
-	for (uint8_t i = 0; i < 3; i++) {
-		checksum += output[i];
-	}
-
-	for (uint8_t i = 0; i < size; i++) {
+	for (int i = 0; i < size; i++) {
 		output[8 + i] = data[i];
 		checksum += data[i];
 	}
-	output[size + 8] = ~checksum & 0xFF;
+	output[size + 8] = (~checksum + 1) & 0xFF;
 	output[size + 9] = PN532_POSTAMBLE;
 	return size + 10;
 }
@@ -252,7 +247,7 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 	uint8_t inDataExchange[size + 2];
 	uint8_t read_frame[256];
 	uint16_t read_size = 0;
-	uint8_t first = 1;
+	bool first = true;
 	bool resend = false;
 	uint8_t remaining = 0;
 	uint8_t number_of_expected_packets = 0;
@@ -264,36 +259,48 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 	uint8_t frameToSend[sizeof(inDataExchange) + 7];
 	Make_Frame_For_Send(inDataExchange, sizeof(inDataExchange), frameToSend, sizeof(frameToSend));
 
-	//frame for continue //11 + AID - NFC wrap, 2 - PN532 command, 3 - data size, 7 - PN532 wrap
-	uint8_t frameToSend_rest[16 + sizeof(AID) + 7];
-
+	//frame for continue //12 + AID - NFC wrap, 2 - PN532 command, 7 - data size, 7 - PN532 wrap
+	uint8_t frameToSend_rest[21 + sizeof(AID) + 7];
 
 	HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)PN532_I2C_ADDRESS, frameToSend, sizeof(frameToSend), HAL_MAX_DELAY);
 	HAL_Delay(500);
-	while(first == 1 || remaining > 0){//timeout needed
+	while(first || remaining > 0){//timeout needed cout-out
 
 		//continue
-		 if(first == 0 || resend){
+		 if(!first || resend){
 			Make_Frame_For_Send_Rest(number_of_expected_packets - remaining, frameToSend_rest, sizeof(frameToSend_rest));
-			HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)PN532_I2C_ADDRESS, frameToSend_rest, sizeof(frameToSend_rest), HAL_MAX_DELAY);
-			HAL_Delay(500);
+			for(int i = 0; i < sizeof(frameToSend_rest); i++){
+				printf("%02X", frameToSend_rest[i]);
+			}
+			printf("\r\n");
+			//while(1){//add time out
+			//	uint8_t uid[4];
+			//	int uidSize = Read_Passive_Target(uid);
+			//	if(uidSize != 0){
+					HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)PN532_I2C_ADDRESS, frameToSend_rest, sizeof(frameToSend_rest), HAL_MAX_DELAY);
+					HAL_Delay(500);
+					resend = false;
+			//	}
+			//	HAL_Delay(100);
+				printf("resend\r\n");
+			//}
 		}
 		Read_Frame_Awaiting(read_frame, sizeof(read_frame));
-
 		if (read_frame[6] != 0xD5) {
 			printf("Invalid frame identifier\r\n");
 			resend = true;
 			continue;
-		} else if (read_frame[7] != 0x41) {
+		} else if (read_frame[7] != 0x41) {//still breaks 0b -> full stop 01 -> infinite ack at 4
 			printf("Invalid command code\r\n");
 			resend = true;
 			continue;
 		} else if (read_frame[8] != 0x00) {
 			printf("Invalid command status got %02x\r\n", read_frame[8]);
+			HAL_Delay(300);
 			resend = true;
 			continue;
 		} else if (read_frame[read_frame[4] + 6 - 2] != 0x90 || read_frame[read_frame[4] + 6 - 1] != 0x00){
-			printf("Invalid NFC response status\r\n");
+			printf("Invalid NFC response status %02x%02x\r\n", read_frame[read_frame[4] + 6 - 2], read_frame[read_frame[4] + 6 - 1]);
 			return 0;
 		}
 
@@ -302,56 +309,61 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 			continue;
 		}
 
-		if (first == 1 && read_frame[14] == 0x01){
-			memcpy(response, read_frame + 14, (read_frame[4]-2) * sizeof(uint8_t));
+		if (first && read_frame[14] == 0x01){
+			//pn532 status code etc. - 3, return preambule - 5, frame number - 1, return code - 2
+			memcpy(response, read_frame + 15, (read_frame[4]-11) * sizeof(uint8_t));
 			printf("single part data finished\r\n");
 			return read_frame[4];
 		}
-		if (first == 1){
+		if (first){
 			number_of_expected_packets = read_frame[14];
 			remaining = number_of_expected_packets - 1;
-			first = 0;
-			memcpy(response + read_size, read_frame + 14, (response[4]-2) * sizeof(uint8_t));
-			read_size += read_frame[4];
+			first = false;
+			memcpy(response, read_frame + 15, (read_frame[4]-11) * sizeof(uint8_t));
+			read_size += read_frame[4]-11;
 			printf("waiting for next part of data, expect %d more \r\n", remaining);
 		} else {
 			remaining--;
-			memcpy(response + read_size, read_frame + 13, (response[4]-2) * sizeof(uint8_t));
-			read_size += read_frame[4];
+			memcpy(response + read_size, read_frame + 14, (read_frame[4]-10) * sizeof(uint8_t));
+			read_size += read_frame[4]-10;
 			printf("waiting for next part of data\r\n");
 		}
 	}
+
 	printf("multiple part data finished %d packets remaining\r\n", remaining);
 	return read_size;
 }
 
 void Make_Frame_For_Send_Rest(uint8_t packet_index, uint8_t* frameToSend_rest, size_t frameToSend_rest_size){
-	uint8_t* send_rest_frame_NFC = malloc((3 + 11) * sizeof(uint8_t) + sizeof(AID));
-	uint8_t send_rest_data[3];
+	uint8_t* send_rest_frame_NFC = malloc((7 + 12) * sizeof(uint8_t) + sizeof(AID));
+	uint8_t send_rest_data[7];
 	send_rest_data[0] = 0x00;
 	send_rest_data[1] = 0x04;
-	send_rest_data[2] = packet_index;
+	send_rest_data[2] = 0x00;
+	send_rest_data[3] = 0x00;
+	send_rest_data[4] = 0x00;
+	send_rest_data[5] = 0x00;
+	send_rest_data[6] = packet_index;
 
 	size_t send_rest_frame_NFC_size = Make_Packet_To_Send_NFC(send_rest_data, sizeof(send_rest_data), send_rest_frame_NFC);
 	uint8_t inDataExchange_rest[send_rest_frame_NFC_size + 2];
 	inDataExchange_rest[0] = PN532_HOST_CODE;
 	inDataExchange_rest[1] = PN532_COMMAND_INDATAEXCHANGE;
 	memcpy(inDataExchange_rest + 2, send_rest_frame_NFC, send_rest_frame_NFC_size * sizeof(uint8_t));
-
 	Make_Frame_For_Send(inDataExchange_rest, sizeof(inDataExchange_rest), frameToSend_rest, frameToSend_rest_size);
 }
 
 //for time being only for normal frames
 bool Is_Checksum_Correct(uint8_t* data){
-	uint8_t checksum = 0;
-	if(data[4] + data[5] != 0x00){
-		printf("length error\r\n");
+	uint16_t checksum = 0;
+	if((data[4] + data[5]) & 0xFF != 0x00){
+		printf("length error len = %02x, check = %02x\r\n", data[4], data[5]);
 		return false;
 	}
 	for(int i = 0; i < data[4]; i++){
 		checksum += data[6 + i];
 	}
-	if(checksum + data[6 + data[4]] != 0x00){
+	if((checksum + data[6 + data[4]]) & 0xFF != 0x00){
 		printf("checksum error\r\n");
 		return false;
 	}

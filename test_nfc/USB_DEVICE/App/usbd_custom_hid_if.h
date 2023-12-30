@@ -151,7 +151,8 @@ size_t Make_Packet_To_Send(uint8_t* data, size_t data_size, uint8_t* output, siz
 void Splice_Data_And_Send(uint8_t* data, size_t data_size, uint8_t command, USBD_HandleTypeDef* hUsbDeviceFS);
 size_t Handle_Init(uint8_t* data, size_t data_size, uint8_t* response);
 size_t Make_Packet_To_Send_NFC(uint8_t* data, size_t data_size, uint8_t* response_data);
-
+size_t Splice_And_Make_Packet_To_Send_NFC(uint8_t* data, size_t data_size, uint8_t* response_data, uint8_t packet_number);
+int How_Many_Frames_Are_Needed_NFC(size_t data_size);
 /* USER CODE END EXPORTED_FUNCTIONS */
 
 /**

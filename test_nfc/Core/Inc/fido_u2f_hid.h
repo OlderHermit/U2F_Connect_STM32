@@ -6,6 +6,7 @@
  */
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #ifndef INC_FIDO_U2F_HID_H_
 #define INC_FIDO_U2F_HID_H_
@@ -41,9 +42,10 @@ typedef struct _HidStruct{
 	int expectedSize;
 	int remainingSize;
 } HidStruct;
-
+//non hid part to extracted somewhere else
 static uint8_t AID[] = {0xF0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
 static uint8_t NFC_SEND_RETRIES = 5;
+static size_t MAX_DATA_PER_PN532_FRAME = 200;
 /*
 size_t Parce_Hid_Packet(uint8_t* data, uint8_t* output);
 HidStruct* Get_Hid_Struct(void);

@@ -220,6 +220,7 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 			response_data_size = Handle_Init(cashe, hidStruct.expectedSize, response_data);
 			printf("prepared init\r\n");
 			break;
+		case U2FHID_PING:
 		case U2FHID_MSG:
 			//if(sizeof(cashe) < 5){
 			//	printf("HID MSG had not enought data (header) found %d bytes\r\n", );
@@ -240,9 +241,32 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				break;
 			}
 
-			//cannot be extracted to function i2c receive breaks stm32
-			if(response_data_size != 0){
-				uint8_t* send_data = malloc((hidStruct.expectedSize + 11) * sizeof(uint8_t) + sizeof(AID));
+			if(hidStruct.command == U2FHID_PING){
+				//implementation of iso 7816 adds 5 bytes at the beginning and 2 bytes response code and 1 for number of packets response was split to
+				response_data = malloc((hidStruct.expectedSize + 8)* sizeof(uint8_t));
+				response_data_size = hidStruct.expectedSize + 8;
+				//adding code for service cache contains only data without code (in case of ping)
+				uint8_t *new_cashe = malloc((hidStruct.expectedSize + 6) * sizeof(uint8_t));//could be changed to realloc to omit memcpy
+				new_cashe[0] = 0x00;
+				new_cashe[1] = 0x05;
+				new_cashe[2] = 0x00;
+				new_cashe[3] = 0x00;
+				new_cashe[4] = 0x00;
+				new_cashe[5] = 0x00;//00 05 00 00 00 00
+				memcpy(new_cashe + 6, cashe, hidStruct.expectedSize * sizeof(uint8_t));
+				hidStruct.expectedSize += 6;
+				free(cashe);
+				cashe = new_cashe;
+
+			}
+			if(response_data_size == 0){
+				break;
+			}
+			//cannot be extracted to function i2c receive breaks stm32(data becomes corrupted)
+			int number_of_packets = How_Many_Frames_Are_Needed_NFC(hidStruct.expectedSize);
+			//check if multiple sends are needed if no this code V if yes for with frames while until received correctly then return
+			if(number_of_packets == 1){
+				uint8_t* send_data = malloc((hidStruct.expectedSize + 12) * sizeof(uint8_t) + sizeof(AID));
 				uint8_t uid[7];
 				uint8_t communications_failed_attemts = 0;
 				size_t send_data_size = Make_Packet_To_Send_NFC(cashe, hidStruct.expectedSize, send_data);
@@ -256,10 +280,6 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 							//memmove(response_data, response_data + 9, response_data_size * sizeof(uint8_t));
 							//add code checking
 							//response_data_size = tmp_response_data_size;
-							if(tmp_response_data_size < 0){
-								printf("NFC error code detected, aborting\r\n");
-								break;
-							}
 							for(int i = 0; i < response_data_size; i++){
 								printf("%02x ", response_data[i]);
 							}
@@ -276,15 +296,46 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 					}
 					printf("mobile not found\r\n");
 				}
-				printf("prepared msg\r\n");
+			} else {
+				uint8_t* send_data = malloc((MAX_DATA_PER_PN532_FRAME + 12 + 5) * sizeof(uint8_t) + sizeof(AID));
+				uint8_t uid[7];
+				for(int i = 0; i < number_of_packets; i++){
+					bool finished_sucessfully = false;
+					uint8_t communications_failed_attemts = 0;
+					size_t send_data_size = Splice_And_Make_Packet_To_Send_NFC(cashe, hidStruct.expectedSize, send_data, i);
+					while(communications_failed_attemts < NFC_SEND_RETRIES && !finished_sucessfully){
+						int uidSize = Read_Passive_Target(uid);
+						if (uidSize != 0){
+							printf("phone found\r\n");
+							size_t tmp_response_data_size = In_Data_Exchange(send_data, send_data_size, response_data, response_data_size);
+							// data was parced in data_exchange fun
+							if(tmp_response_data_size != 0){
+								//for(int j = 0; j < tmp_response_data_size; j++){
+								//	printf("%02x ", response_data[j]);
+								//}
+								//printf("\r\n");
+								printf("packet number %d out of %d received correctly\r\n", i , number_of_packets);
+								response_data_size = tmp_response_data_size;
+								finished_sucessfully = true;
+								continue;
+							}
+							printf("something went wrong response code seems to be inccorect\r\n");
+							//moved inside in data exchange so probably obsolete V
+							communications_failed_attemts++;
+						} else {
+							printf("mobile not found\r\n");
+						}
+					}
+				}
 			}
+			printf("prepared msg\r\n");
 			break;
-		case U2FHID_PING:
+		/*case U2FHID_PING:
 			response_data = malloc(hidStruct.expectedSize * sizeof(uint8_t));
 			response_data_size = hidStruct.expectedSize;
 			response_data = cashe;
 			printf("prepared ping\r\n");
-			break;
+			break;*/
 		default:
 			//take care of exception
 			break;
@@ -315,6 +366,11 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				send_already_size += take_data_size;
 			}
 		}
+		//printf("will send:\r\n");
+		//for(int i = 0; i < giga_packet_size; i++){
+		//	printf("%02X ", giga_packet[i]);
+		//}
+		//printf("\r\n");
 		USBD_CUSTOM_HID_SendReport(&hUsbDeviceFS, giga_packet, giga_packet_size * sizeof(uint8_t));
 		free(response_data);
 		free(cashe);
@@ -380,7 +436,7 @@ size_t Make_Packet_To_Send(uint8_t* data, size_t data_size, uint8_t* output, siz
 		return 0;
 	}
 	memcpy(output, hidStruct.ChannelId, sizeof(hidStruct.ChannelId));
-	if(wholeSequenceSize > 0){
+	if(wholeSequenceSize > 0){//first packet (init packet)
 		output[4] = command;
 		output[5] = (wholeSequenceSize >> 8) & 0xFF;
 		output[6] = wholeSequenceSize & 0xFF;
@@ -416,21 +472,62 @@ size_t Handle_Init(uint8_t* data, size_t data_size, uint8_t* response){
 }
 
 size_t Make_Packet_To_Send_NFC(uint8_t* data, size_t data_size, uint8_t* response_data){
+	size_t AID_length = sizeof(AID)/sizeof(uint8_t);
+
 	response_data[0] = 0x01;
 	response_data[1] = 0x00;
 	response_data[2] = 0xA4;
 	response_data[3] = 0x04;
 	response_data[4] = 0x00;
-	response_data[5] = sizeof(AID)/sizeof(uint8_t);
-	memcpy(response_data + 6, AID, sizeof(AID)/sizeof(uint8_t));
-	response_data[6 + sizeof(AID)/sizeof(uint8_t)] = hidStruct.ChannelId[0];
-	response_data[6 + sizeof(AID)/sizeof(uint8_t) + 1] = hidStruct.ChannelId[1];
-	response_data[6 + sizeof(AID)/sizeof(uint8_t) + 2] = hidStruct.ChannelId[2];
-	response_data[6 + sizeof(AID)/sizeof(uint8_t) + 3] = hidStruct.ChannelId[3];
-	memcpy(response_data + 6 + 4 + sizeof(AID)/sizeof(uint8_t), data, data_size * sizeof(uint8_t));
-	response_data[6 + 4 + sizeof(AID)/sizeof(uint8_t) + data_size] = 0x00;
+	response_data[5] = AID_length;
+	memcpy(response_data + 6, AID, sizeof(AID));
+	response_data[6 + AID_length] = hidStruct.ChannelId[0];
+	response_data[6 + AID_length + 1] = hidStruct.ChannelId[1];
+	response_data[6 + AID_length + 2] = hidStruct.ChannelId[2];
+	response_data[6 + AID_length + 3] = hidStruct.ChannelId[3];
+	response_data[6 + AID_length + 4] = 0x00;//0x01?
+	memcpy(response_data + 6 + 5 + AID_length, data, data_size * sizeof(uint8_t));
+	response_data[6 + 5 + AID_length + data_size] = 0x00;
 
-	return (hidStruct.expectedSize + 7) + sizeof(AID)/sizeof(uint8_t);
+	return data_size + 12 + AID_length;
+}
+
+size_t Splice_And_Make_Packet_To_Send_NFC(uint8_t* data, size_t data_size, uint8_t* response_data, uint8_t packet_number){
+	size_t AID_length = sizeof(AID)/sizeof(uint8_t);
+	size_t included_data_size = (MAX_DATA_PER_PN532_FRAME < (data_size - packet_number * MAX_DATA_PER_PN532_FRAME)) ? MAX_DATA_PER_PN532_FRAME : data_size - packet_number * MAX_DATA_PER_PN532_FRAME;
+	size_t offset = 0;
+
+	response_data[0] = 0x01;
+	response_data[1] = 0x00;
+	response_data[2] = 0xA4;
+	response_data[3] = 0x04;
+	response_data[4] = 0x00;
+	response_data[5] = AID_length;
+	memcpy(response_data + 6, AID, sizeof(AID));
+	response_data[6 + AID_length] = hidStruct.ChannelId[0];
+	response_data[6 + AID_length + 1] = hidStruct.ChannelId[1];
+	response_data[6 + AID_length + 2] = hidStruct.ChannelId[2];
+	response_data[6 + AID_length + 3] = hidStruct.ChannelId[3];
+	response_data[6 + AID_length + 4] = (How_Many_Frames_Are_Needed_NFC(data_size) - packet_number) & 0xFF;
+	if(packet_number != 0){
+		memcpy(response_data + 6 + 5 + AID_length, data, 6 * sizeof(uint8_t));
+		offset = 6;
+	}
+	memcpy(response_data + 6 + 5 + offset + AID_length, data + packet_number * MAX_DATA_PER_PN532_FRAME, included_data_size * sizeof(uint8_t));
+	response_data[6 + 5 + offset + AID_length + included_data_size] = 0x00;
+
+	return 12 + offset + AID_length + included_data_size;
+}
+
+int How_Many_Frames_Are_Needed_NFC(size_t data_size){
+	data_size -= 5;
+	if(data_size <= 0){
+		printf("error during checking number of required packets\r\n");
+		return 1;
+	}
+	int count = data_size / MAX_DATA_PER_PN532_FRAME;
+	count = data_size % MAX_DATA_PER_PN532_FRAME != 0 ? count + 1 : count;
+	return count;
 }
 
 
