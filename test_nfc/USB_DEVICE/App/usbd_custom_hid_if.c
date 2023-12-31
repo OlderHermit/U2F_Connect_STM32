@@ -275,15 +275,12 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 					if (uidSize != 0){
 						size_t tmp_response_data_size = In_Data_Exchange(send_data, send_data_size, response_data, response_data_size);
 
-						if(tmp_response_data_size != 0 /*&& tmp_response_data_size >= 9*/){
-							//response_data_size = tmp_response_data_size - 3;//removing 10 00 ff added by PN532
-							//memmove(response_data, response_data + 9, response_data_size * sizeof(uint8_t));
-							//add code checking
-							//response_data_size = tmp_response_data_size;
-							for(int i = 0; i < response_data_size; i++){
-								printf("%02x ", response_data[i]);
-							}
-							printf("\r\n");
+						if(tmp_response_data_size != 0){
+							//for(int i = 0; i < tmp_response_data_size; i++){
+							//	printf("%02x ", response_data[i]);
+							//}
+							//printf("\r\n");i
+							response_data_size = tmp_response_data_size;
 							break;
 						}
 						printf("something went wrong will request re send\r\n");
@@ -330,12 +327,6 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 			}
 			printf("prepared msg\r\n");
 			break;
-		/*case U2FHID_PING:
-			response_data = malloc(hidStruct.expectedSize * sizeof(uint8_t));
-			response_data_size = hidStruct.expectedSize;
-			response_data = cashe;
-			printf("prepared ping\r\n");
-			break;*/
 		default:
 			//take care of exception
 			break;
@@ -485,7 +476,7 @@ size_t Make_Packet_To_Send_NFC(uint8_t* data, size_t data_size, uint8_t* respons
 	response_data[6 + AID_length + 1] = hidStruct.ChannelId[1];
 	response_data[6 + AID_length + 2] = hidStruct.ChannelId[2];
 	response_data[6 + AID_length + 3] = hidStruct.ChannelId[3];
-	response_data[6 + AID_length + 4] = 0x00;//0x01?
+	response_data[6 + AID_length + 4] = 0x01;
 	memcpy(response_data + 6 + 5 + AID_length, data, data_size * sizeof(uint8_t));
 	response_data[6 + 5 + AID_length + data_size] = 0x00;
 

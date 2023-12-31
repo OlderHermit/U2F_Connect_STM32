@@ -313,7 +313,7 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 			//pn532 status code etc. - 3, return preambule - 5, frame number - 1, return code - 2
 			memcpy(response, read_frame + 15, (read_frame[4]-11) * sizeof(uint8_t));
 			printf("single part data finished\r\n");
-			return read_frame[4];
+			return read_frame[4]-11;
 		}
 		if (first){
 			number_of_expected_packets = read_frame[14];
