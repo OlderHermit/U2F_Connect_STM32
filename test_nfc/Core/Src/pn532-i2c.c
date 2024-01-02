@@ -301,7 +301,7 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 			continue;
 		} else if (read_frame[read_frame[4] + 6 - 2] != 0x90 || read_frame[read_frame[4] + 6 - 1] != 0x00){
 			printf("Invalid NFC response status %02x%02x\r\n", read_frame[read_frame[4] + 6 - 2], read_frame[read_frame[4] + 6 - 1]);
-			return 0;
+			return -1;
 		}
 
 		if(!Is_Checksum_Correct(read_frame)){

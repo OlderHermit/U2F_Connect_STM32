@@ -234,6 +234,12 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 			case U2FISO7816_AUTHENTICATE:
 				response_data = malloc(64 * 20 * sizeof(uint8_t));//to be changed
 				response_data_size = 64*20;//to be changed
+				int pos = 6;
+				uint8_t *new_cashe = realloc(cashe, (hidStruct.expectedSize + 1) * sizeof(uint8_t));
+				cashe = new_cashe;
+				memmove(cashe[pos + 1], cashe[pos], (hidStruct.expectedSize - pos)*sizeof(uint8_t));
+				cashe[pos] = cashe[2];//add p1 as first element of data
+				hidStruct.expectedSize += 1;
 				break;
 			case U2FISO7816_REGISTER:
 				response_data = malloc(64 * 20 * sizeof(uint8_t));//to be changed
@@ -275,7 +281,7 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 					if (uidSize != 0){
 						size_t tmp_response_data_size = In_Data_Exchange(send_data, send_data_size, response_data, response_data_size);
 
-						if(tmp_response_data_size != 0){
+						if(tmp_response_data_size >= 0){
 							//for(int i = 0; i < tmp_response_data_size; i++){
 							//	printf("%02x ", response_data[i]);
 							//}
@@ -297,24 +303,22 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				uint8_t* send_data = malloc((MAX_DATA_PER_PN532_FRAME + 12 + 5) * sizeof(uint8_t) + sizeof(AID));
 				uint8_t uid[7];
 				for(int i = 0; i < number_of_packets; i++){
-					bool finished_sucessfully = false;
 					uint8_t communications_failed_attemts = 0;
 					size_t send_data_size = Splice_And_Make_Packet_To_Send_NFC(cashe, hidStruct.expectedSize, send_data, i);
-					while(communications_failed_attemts < NFC_SEND_RETRIES && !finished_sucessfully){
+					while(communications_failed_attemts < NFC_SEND_RETRIES){
 						int uidSize = Read_Passive_Target(uid);
 						if (uidSize != 0){
 							printf("phone found\r\n");
 							size_t tmp_response_data_size = In_Data_Exchange(send_data, send_data_size, response_data, response_data_size);
 							// data was parced in data_exchange fun
-							if(tmp_response_data_size != 0){
+							if(tmp_response_data_size >= 0){
 								//for(int j = 0; j < tmp_response_data_size; j++){
 								//	printf("%02x ", response_data[j]);
 								//}
 								//printf("\r\n");
 								printf("packet number %d out of %d received correctly\r\n", i , number_of_packets);
 								response_data_size = tmp_response_data_size;
-								finished_sucessfully = true;
-								continue;
+								break;
 							}
 							printf("something went wrong response code seems to be inccorect\r\n");
 							//moved inside in data exchange so probably obsolete V
@@ -504,10 +508,10 @@ size_t Splice_And_Make_Packet_To_Send_NFC(uint8_t* data, size_t data_size, uint8
 		memcpy(response_data + 6 + 5 + AID_length, data, 6 * sizeof(uint8_t));
 		offset = 6;
 	}
-	memcpy(response_data + 6 + 5 + offset + AID_length, data + packet_number * MAX_DATA_PER_PN532_FRAME, included_data_size * sizeof(uint8_t));
+	memcpy(response_data + 6 + 5 + offset + AID_length, data + packet_number * MAX_DATA_PER_PN532_FRAME, included_data_size * sizeof(uint8_t));//Potentially remove - packet_number
 	response_data[6 + 5 + offset + AID_length + included_data_size] = 0x00;
 
-	return 12 + offset + AID_length + included_data_size;
+	return included_data_size + 12 + offset + AID_length;
 }
 
 int How_Many_Frames_Are_Needed_NFC(size_t data_size){
