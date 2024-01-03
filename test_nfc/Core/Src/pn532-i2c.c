@@ -269,21 +269,21 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 		//continue
 		 if(!first || resend){
 			Make_Frame_For_Send_Rest(number_of_expected_packets - remaining, frameToSend_rest, sizeof(frameToSend_rest));
-			for(int i = 0; i < sizeof(frameToSend_rest); i++){
-				printf("%02X", frameToSend_rest[i]);
+			printf("resend\r\n");
+			if(read_frame[7] == 0x01){//lost target
+				while(1){////timeout needed cout-out
+					uint8_t uid[4];
+					int uidSize = Read_Passive_Target(uid);
+					if(uidSize != 0){
+						printf("new uid found\r\n");
+						break;
+					}
+					HAL_Delay(100);
+				}
 			}
-			printf("\r\n");
-			//while(1){//add time out
-			//	uint8_t uid[4];
-			//	int uidSize = Read_Passive_Target(uid);
-			//	if(uidSize != 0){
-					HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)PN532_I2C_ADDRESS, frameToSend_rest, sizeof(frameToSend_rest), HAL_MAX_DELAY);
-					HAL_Delay(500);
-					resend = false;
-			//	}
-			//	HAL_Delay(100);
-				printf("resend\r\n");
-			//}
+			HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)PN532_I2C_ADDRESS, frameToSend_rest, sizeof(frameToSend_rest), HAL_MAX_DELAY);
+			HAL_Delay(500);
+			resend = false;
 		}
 		Read_Frame_Awaiting(read_frame, sizeof(read_frame));
 		if (read_frame[6] != 0xD5) {

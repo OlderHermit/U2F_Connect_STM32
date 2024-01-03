@@ -115,8 +115,6 @@ __ALIGN_BEGIN static uint8_t CUSTOM_HID_ReportDesc_FS[USBD_CUSTOM_HID_REPORT_DES
 static uint8_t* cashe;
 
 static HidStruct hidStruct = {.ChannelId = {0, 0, 0, 0}, .command = U2FHID_NONE, .finishedPacketSequence = true, .expectedSize = 0, .remainingSize = 0};
-static uint32_t generatedChannels[] = {0x10111213, 0x01020304};//[10];//to change
-static int generatedChannelsCount = 0;
 /* USER CODE END PRIVATE_VARIABLES */
 
 /**
@@ -199,7 +197,6 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 	uint8_t parced[0x40];
 	bool will_generate_new_alloc = false;
 
-	//Print_Packet();
 	if(hidStruct.finishedPacketSequence){
 		will_generate_new_alloc = true;
 	}
@@ -222,22 +219,18 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 			break;
 		case U2FHID_PING:
 		case U2FHID_MSG:
-			//if(sizeof(cashe) < 5){
-			//	printf("HID MSG had not enought data (header) found %d bytes\r\n", );
-			//	break;
-			//}
 			switch(cashe[1]){
 			case U2FISO7816_VERSION:
-				response_data = malloc(64 * 20 * sizeof(uint8_t));//to be changed
-				response_data_size = 64*20;//to be changed
+				response_data = malloc(64 * sizeof(uint8_t));//too big version should be 8 bytes
+				response_data_size = 64;
 				break;
 			case U2FISO7816_AUTHENTICATE:
-				response_data = malloc(64 * 20 * sizeof(uint8_t));//to be changed
-				response_data_size = 64*20;//to be changed
+				response_data = malloc(64 * 2 * sizeof(uint8_t));//size about 0x50 = 80
+				response_data_size = 64*2;
 				int pos = 6;
 				uint8_t *new_cashe = realloc(cashe, (hidStruct.expectedSize + 1) * sizeof(uint8_t));
 				cashe = new_cashe;
-				memmove(cashe[pos + 1], cashe[pos], (hidStruct.expectedSize - pos)*sizeof(uint8_t));
+				memmove(&cashe[pos + 1], &cashe[pos], (hidStruct.expectedSize - pos)*sizeof(uint8_t));
 				cashe[pos] = cashe[2];//add p1 as first element of data
 				hidStruct.expectedSize += 1;
 				break;
@@ -276,26 +269,16 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				uint8_t uid[7];
 				uint8_t communications_failed_attemts = 0;
 				size_t send_data_size = Make_Packet_To_Send_NFC(cashe, hidStruct.expectedSize, send_data);
-				while(communications_failed_attemts < NFC_SEND_RETRIES){
+				while(1){////timeout needed cout-out (will not be multiplied with one inside in data exchange)
 					int uidSize = Read_Passive_Target(uid);
 					if (uidSize != 0){
 						size_t tmp_response_data_size = In_Data_Exchange(send_data, send_data_size, response_data, response_data_size);
-
 						if(tmp_response_data_size >= 0){
-							//for(int i = 0; i < tmp_response_data_size; i++){
-							//	printf("%02x ", response_data[i]);
-							//}
-							//printf("\r\n");i
 							response_data_size = tmp_response_data_size;
 							break;
 						}
-						printf("something went wrong will request re send\r\n");
-						for(int i = 0; i < 30; i++){
-							printf("%02x ", response_data[i]);
-						}
-						printf("\r\n");
-						communications_failed_attemts++;
-						//change data to request just re-send if that was communication error (not NFC code)
+						printf("something went wrong response code seems to be incorrect\r\n");
+						break;
 					}
 					printf("mobile not found\r\n");
 				}
@@ -303,26 +286,21 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				uint8_t* send_data = malloc((MAX_DATA_PER_PN532_FRAME + 12 + 5) * sizeof(uint8_t) + sizeof(AID));
 				uint8_t uid[7];
 				for(int i = 0; i < number_of_packets; i++){
-					uint8_t communications_failed_attemts = 0;
 					size_t send_data_size = Splice_And_Make_Packet_To_Send_NFC(cashe, hidStruct.expectedSize, send_data, i);
-					while(communications_failed_attemts < NFC_SEND_RETRIES){
+					while(1){//timeout needed cout-out (will not be multiplied with one inside in data exchange)
 						int uidSize = Read_Passive_Target(uid);
 						if (uidSize != 0){
 							printf("phone found\r\n");
 							size_t tmp_response_data_size = In_Data_Exchange(send_data, send_data_size, response_data, response_data_size);
-							// data was parced in data_exchange fun
 							if(tmp_response_data_size >= 0){
-								//for(int j = 0; j < tmp_response_data_size; j++){
-								//	printf("%02x ", response_data[j]);
-								//}
-								//printf("\r\n");
-								printf("packet number %d out of %d received correctly\r\n", i , number_of_packets);
-								response_data_size = tmp_response_data_size;
+								printf("received %d packets out of %d received correctly\r\n", i+1 , number_of_packets);
+								if(i == number_of_packets - 1){
+									response_data_size = tmp_response_data_size;
+								}
 								break;
 							}
-							printf("something went wrong response code seems to be inccorect\r\n");
-							//moved inside in data exchange so probably obsolete V
-							communications_failed_attemts++;
+							printf("something went wrong response code seems to be incorrect\r\n");
+							break;
 						} else {
 							printf("mobile not found\r\n");
 						}
@@ -361,11 +339,7 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				send_already_size += take_data_size;
 			}
 		}
-		//printf("will send:\r\n");
-		//for(int i = 0; i < giga_packet_size; i++){
-		//	printf("%02X ", giga_packet[i]);
-		//}
-		//printf("\r\n");
+
 		USBD_CUSTOM_HID_SendReport(&hUsbDeviceFS, giga_packet, giga_packet_size * sizeof(uint8_t));
 		free(response_data);
 		free(cashe);
@@ -453,10 +427,11 @@ size_t Make_Packet_To_Send(uint8_t* data, size_t data_size, uint8_t* output, siz
 
 size_t Handle_Init(uint8_t* data, size_t data_size, uint8_t* response){
 	memcpy(response, data, 8 * sizeof(uint8_t));
-	response[8] = (generatedChannels[generatedChannelsCount] >> 24) & 0xFF;
-	response[9] = (generatedChannels[generatedChannelsCount] >> 16) & 0xFF;
-	response[10] = (generatedChannels[generatedChannelsCount] >> 8) & 0xFF;
-	response[11] = generatedChannels[generatedChannelsCount] & 0xFF;
+	response[8] = rand() % 0xff;
+	response[9] = rand() % 0xff;
+	response[10] = rand() % 0xff;
+	response[11] = rand() % 0xff;
+	printf("channel %02X, %02X, %02X, %02X\r\n",response[8], response[9], response[10], response[11]);
 	response[12] = 2;//test change this parameters to mean something
 	response[13] = 2;
 	response[14] = 1;
