@@ -113,8 +113,8 @@ __ALIGN_BEGIN static uint8_t CUSTOM_HID_ReportDesc_FS[USBD_CUSTOM_HID_REPORT_DES
 
 /* USER CODE BEGIN PRIVATE_VARIABLES */
 static uint8_t* cashe;
-
 static HidStruct hidStruct = {.ChannelId = {0, 0, 0, 0}, .command = U2FHID_NONE, .finishedPacketSequence = true, .expectedSize = 0, .remainingSize = 0};
+RNG_HandleTypeDef RngHandle;
 /* USER CODE END PRIVATE_VARIABLES */
 
 /**
@@ -168,10 +168,13 @@ USBD_CUSTOM_HID_ItfTypeDef USBD_CustomHID_fops_FS =
   */
 static int8_t CUSTOM_HID_Init_FS(void)
 {
-  /* USER CODE BEGIN 4 */
+	/* USER CODE BEGIN 4 */
+	RngHandle.Instance = RNG;
+	HAL_RNG_Init(&RngHandle);
 	printf("started\r\n");
-  return (USBD_OK);
-  /* USER CODE END 4 */
+
+	return (USBD_OK);
+	/* USER CODE END 4 */
 }
 
 /**
@@ -426,11 +429,16 @@ size_t Make_Packet_To_Send(uint8_t* data, size_t data_size, uint8_t* output, siz
 }
 
 size_t Handle_Init(uint8_t* data, size_t data_size, uint8_t* response){
+	HAL_RNG_GenerateRandomNumber(&RngHandle, response[8]);
+	HAL_RNG_GenerateRandomNumber(&RngHandle, response[9]);
+	HAL_RNG_GenerateRandomNumber(&RngHandle, response[10]);
+	HAL_RNG_GenerateRandomNumber(&RngHandle, response[11]);
+
 	memcpy(response, data, 8 * sizeof(uint8_t));
-	response[8] = rand() % 0xff;
-	response[9] = rand() % 0xff;
-	response[10] = rand() % 0xff;
-	response[11] = rand() % 0xff;
+	//response[8] = rand() % 0xff;
+	//response[9] = rand() % 0xff;
+	//response[10] = rand() % 0xff;
+	//response[11] = rand() % 0xff;
 	printf("channel %02X, %02X, %02X, %02X\r\n",response[8], response[9], response[10], response[11]);
 	response[12] = 2;//test change this parameters to mean something
 	response[13] = 2;

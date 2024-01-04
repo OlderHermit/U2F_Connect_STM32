@@ -269,7 +269,7 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 		//continue
 		 if(!first || resend){
 			Make_Frame_For_Send_Rest(number_of_expected_packets - remaining, frameToSend_rest, sizeof(frameToSend_rest));
-			printf("resend\r\n");
+			//printf("resend\r\n");
 			if(read_frame[7] == 0x01){//lost target
 				while(1){////timeout needed cout-out
 					uint8_t uid[4];
@@ -279,6 +279,7 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 						break;
 					}
 					HAL_Delay(100);
+					printf("mobile not found\r\n");
 				}
 			}
 			HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)PN532_I2C_ADDRESS, frameToSend_rest, sizeof(frameToSend_rest), HAL_MAX_DELAY);
@@ -326,7 +327,7 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 			remaining--;
 			memcpy(response + read_size, read_frame + 14, (read_frame[4]-10) * sizeof(uint8_t));
 			read_size += read_frame[4]-10;
-			printf("waiting for next part of data\r\n");
+			printf("waiting for next part of data, expect %d more \r\n", remaining);
 		}
 	}
 
