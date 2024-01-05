@@ -28,9 +28,9 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "usbd_customhid.h"
-#include "fido_u2f_hid.h"
 
 /* USER CODE BEGIN INCLUDE */
+#include "fido_u2f_hid.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>

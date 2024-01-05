@@ -269,8 +269,7 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 		//continue
 		 if(!first || resend){
 			Make_Frame_For_Send_Rest(number_of_expected_packets - remaining, frameToSend_rest, sizeof(frameToSend_rest));
-			//printf("resend\r\n");
-			if(read_frame[7] == 0x01){//lost target
+			if(read_frame[8] == 0x01){//lost target
 				while(1){////timeout needed cout-out
 					uint8_t uid[4];
 					int uidSize = Read_Passive_Target(uid);

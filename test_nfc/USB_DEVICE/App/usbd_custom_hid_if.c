@@ -238,8 +238,8 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				hidStruct.expectedSize += 1;
 				break;
 			case U2FISO7816_REGISTER:
-				response_data = malloc(64 * 20 * sizeof(uint8_t));//to be changed
-				response_data_size = 64*20;//to be changed
+				response_data = malloc(64 * 12 * sizeof(uint8_t));
+				response_data_size = 64*12;
 				break;
 			}
 
@@ -435,10 +435,10 @@ size_t Handle_Init(uint8_t* data, size_t data_size, uint8_t* response){
 	HAL_RNG_GenerateRandomNumber(&RngHandle, response[11]);
 
 	memcpy(response, data, 8 * sizeof(uint8_t));
-	//response[8] = rand() % 0xff;
-	//response[9] = rand() % 0xff;
-	//response[10] = rand() % 0xff;
-	//response[11] = rand() % 0xff;
+	//response[8] = 0x10;
+	//response[9] = 0x11;
+	//response[10] = 0x12;
+	//response[11] = 0x13;
 	printf("channel %02X, %02X, %02X, %02X\r\n",response[8], response[9], response[10], response[11]);
 	response[12] = 2;//test change this parameters to mean something
 	response[13] = 2;
