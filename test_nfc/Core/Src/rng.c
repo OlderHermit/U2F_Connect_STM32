@@ -58,6 +58,10 @@ void HAL_RNG_MspInit(RNG_HandleTypeDef* rngHandle)
   /* USER CODE END RNG_MspInit 0 */
     /* RNG clock enable */
     __HAL_RCC_RNG_CLK_ENABLE();
+
+    /* RNG interrupt Init */
+    HAL_NVIC_SetPriority(RNG_IRQn, 1, 0);
+    HAL_NVIC_EnableIRQ(RNG_IRQn);
   /* USER CODE BEGIN RNG_MspInit 1 */
 
   /* USER CODE END RNG_MspInit 1 */
@@ -74,6 +78,9 @@ void HAL_RNG_MspDeInit(RNG_HandleTypeDef* rngHandle)
   /* USER CODE END RNG_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_RNG_CLK_DISABLE();
+
+    /* RNG interrupt Deinit */
+    HAL_NVIC_DisableIRQ(RNG_IRQn);
   /* USER CODE BEGIN RNG_MspDeInit 1 */
 
   /* USER CODE END RNG_MspDeInit 1 */
