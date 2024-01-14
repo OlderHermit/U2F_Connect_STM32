@@ -311,10 +311,15 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				}
 			}
 			printf("prepared msg\r\n");
+			printf("msg data length %d\r\n",response_data_size);
 			break;
 		default:
 			//take care of exception
 			break;
+		}
+		if(response_data_size < 0){
+			USBD_CUSTOM_HID_ReceivePacket(&hUsbDeviceFS);
+			return (USBD_OK);
 		}
 		//cannot be extracted to function SendReport breaks stm32
 		uint8_t giga_packet[64*25];//bad to change

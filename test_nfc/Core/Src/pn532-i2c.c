@@ -286,15 +286,16 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 			resend = false;
 		}
 		Read_Frame_Awaiting(read_frame, sizeof(read_frame));
+		printf("\r\n");
 		if (read_frame[6] != 0xD5) {
 			printf("Invalid frame identifier\r\n");
 			resend = true;
 			continue;
-		} else if (read_frame[7] != 0x41) {//still breaks 0b -> full stop 01 -> infinite ack at 4
+		} else if (read_frame[7] != 0x41) {
 			printf("Invalid command code\r\n");
 			resend = true;
 			continue;
-		} else if (read_frame[8] != 0x00) {
+		} else if (read_frame[8] != 0x00) {//still breaks 0b -> full stop 01 -> infinite ack at 4
 			printf("Invalid command status got %02x\r\n", read_frame[8]);
 			HAL_Delay(300);
 			resend = true;
@@ -308,24 +309,26 @@ int In_Data_Exchange(uint8_t* data, size_t size, uint8_t* response, size_t respo
 			resend = true;
 			continue;
 		}
-
-		if (first && read_frame[14] == 0x01){
-			//pn532 status code etc. - 3, return preambule - 5, frame number - 1, return code - 2
-			memcpy(response, read_frame + 15, (read_frame[4]-11) * sizeof(uint8_t));
+		if (first && read_frame[9] == 0x01){
+			//10 = pn532 status code etc. - 4, length & checksum - 2, return preambule - 3, frame number - 1
+			//6 = return preambule - 3, frame number - 1, return code - 2
+			memcpy(response, read_frame + 10, (read_frame[4]-6) * sizeof(uint8_t));
 			printf("single part data finished\r\n");
-			return read_frame[4]-11;
+			return read_frame[4]-11+5;
 		}
 		if (first){
-			number_of_expected_packets = read_frame[14];
+			number_of_expected_packets = read_frame[9];
 			remaining = number_of_expected_packets - 1;
 			first = false;
-			memcpy(response, read_frame + 15, (read_frame[4]-11) * sizeof(uint8_t));
-			read_size += read_frame[4]-11;
+			memcpy(response, read_frame + 10, (read_frame[4]-6) * sizeof(uint8_t));
+			read_size += read_frame[4]-6;
 			printf("waiting for next part of data, expect %d more \r\n", remaining);
 		} else {
 			remaining--;
-			memcpy(response + read_size, read_frame + 14, (read_frame[4]-10) * sizeof(uint8_t));
-			read_size += read_frame[4]-10;
+			//9 = no frame number - 1
+			//5 = no frame number - 1
+			memcpy(response + read_size, read_frame + 9, (read_frame[4]-5) * sizeof(uint8_t));
+			read_size += read_frame[4]-5;
 			printf("waiting for next part of data, expect %d more \r\n", remaining);
 		}
 	}

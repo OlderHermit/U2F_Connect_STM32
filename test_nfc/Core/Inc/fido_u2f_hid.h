@@ -43,7 +43,7 @@ typedef struct _HidStruct{
 	int remainingSize;
 } HidStruct;
 //non hid part to extracted somewhere else
-static uint8_t AID[] = {0xF0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+static uint8_t AID[] = {0xF0, 0x05, 0x04, 0x03, 0x02, 0x01, 0xA1};
 static uint8_t NFC_SEND_RETRIES = 5;
 static size_t MAX_DATA_PER_PN532_FRAME = 200;
 /*
