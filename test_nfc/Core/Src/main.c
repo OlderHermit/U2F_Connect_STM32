@@ -99,86 +99,12 @@ int main(void)
   Set_SAM_Configuration(PN532_MODE_NORMAL);
   HAL_Delay(1000);
 
-  uint8_t uid[7];
-  uint8_t response[PN532_FRAME_MAX_LENGTH];
-
-  uint8_t SELECT_APDU[] = {
-    0x01, //target
-	0x00, /* CLA */
-    0xA4, /* INS */
-    0x04, /* P1  */
-    0x00, /* P2  */
-    0x07, /* Length of AID  */
-    0xF0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, /* AID  */
-    0x00  /* Le  */
-  };
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  //read tag
-/*
-	  int uidSize = Read_Passive_Target(uid);
-	  if (uidSize != 0){
-		  for(int i = 0; i < uidSize; i++){
-			  printf("%02x", uid[i]);
-		  }
-		  printf("\r\n");
-		  if(Mifare_Auth(uid, uidSize, 1)){
-			  printf("Card authorized correctly\r\n");
-			  Mifare_Read(response, sizeof(response), 1);
-
-			  for(int i = 9; i < 30; i++){
-				  //printf("%02x ", response[i]);
-				  printf("%c", response[i]);
-			  }
-			  printf("\r\n");
-		  }
-	  }
-	  HAL_Delay(1000);
-*//*
-
-	  int uidSize = Read_Passive_Target(uid);
-	  	  if (uidSize != 0){
-	  		  for(int i = 0; i < uidSize; i++){
-	  			  printf("%02x", uid[i]);
-	  		  }
-	  		  printf("\r\n");
-	  		  if(Mifare_Auth(uid, uidSize, 5)){
-	  			  printf("Card authorized correctly\r\n");
-	  			  Mifare_Write(response, sizeof(response), 5, data_to_send, sizeof(data_to_send));
-
-	  			  if(Mifare_Read(response, sizeof(response), 5)){
-	  			  for(int i = 9; i < 25; i++){
-	  				  //printf("%02x ", response[i]);
-	  				  printf("%c", response[i]);
-	  			  }
-	  			  }
-	  			  printf("\r\n");
-	  		  }
-	  	  }
-	  	  HAL_Delay(1000);
-*//*
-	  uint8_t test_apdu[]= {0x01, 0x00, 0xA4, 0x04 ,0x00 ,0x07 ,0xf0 ,0x01 ,0x02 ,0x03 ,0x04 ,0x05 ,0x06 ,0x00 ,0x03 ,0x00 ,0x00 ,0x00 ,0x00, 0x00, 0x00};
-	  int uidSize = Read_Passive_Target(uid);
-	  if (uidSize != 0){
-		  for(int i = 0; i < uidSize; i++){
-			  printf("%02x", uid[i]);
-		  }
-		  printf("\r\n");
-		  //if(In_Data_Exchange(SELECT_APDU, sizeof(SELECT_APDU), response, sizeof(response))){
-		  In_Data_Exchange(test_apdu, sizeof(test_apdu), response, sizeof(response));
-		  for(int i = 0; i < 30; i++){
-			  printf("%02x ", response[i]);
-			  //printf("%c", response[i]);
-		  }
-		  printf("\r\n");
-		  //}
-	  }
-	  HAL_Delay(1000);*/
-
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

@@ -112,7 +112,7 @@ __ALIGN_BEGIN static uint8_t CUSTOM_HID_ReportDesc_FS[USBD_CUSTOM_HID_REPORT_DES
 };
 
 /* USER CODE BEGIN PRIVATE_VARIABLES */
-static uint8_t* cashe;
+static uint8_t* cache;
 static HidStruct hidStruct = {.ChannelId = {0, 0, 0, 0}, .command = U2FHID_NONE, .finishedPacketSequence = true, .expectedSize = 0, .remainingSize = 0};
 RNG_HandleTypeDef RngHandle;
 /* USER CODE END PRIVATE_VARIABLES */
@@ -206,9 +206,9 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 
 	size_t parced_size = Parce_Hid_Packet(recive, parced);
 	if(will_generate_new_alloc){
-		cashe = malloc((hidStruct.expectedSize) * sizeof(uint8_t));
+		cache = malloc((hidStruct.expectedSize) * sizeof(uint8_t));
 	}
-	memcpy(cashe + (hidStruct.expectedSize - hidStruct.remainingSize - parced_size), parced, parced_size*sizeof(uint8_t));
+	memcpy(cache + (hidStruct.expectedSize - hidStruct.remainingSize - parced_size), parced, parced_size*sizeof(uint8_t));
 
 	if(hidStruct.finishedPacketSequence){
 		// make operations
@@ -217,12 +217,12 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 		switch(hidStruct.command){
 		case U2FHID_INIT:
 			response_data = malloc(17 * sizeof(uint8_t));
-			response_data_size = Handle_Init(cashe, hidStruct.expectedSize, response_data);
+			response_data_size = Handle_Init(cache, hidStruct.expectedSize, response_data);
 			printf("prepared init\r\n");
 			break;
 		case U2FHID_PING:
 		case U2FHID_MSG:
-			switch(cashe[1]){
+			switch(cache[1]){
 			case U2FISO7816_VERSION:
 				response_data = malloc(64 * sizeof(uint8_t));//too big version should be 8 bytes
 				response_data_size = 64;
@@ -231,10 +231,10 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				response_data = malloc(64 * 2 * sizeof(uint8_t));//size about 0x50 = 80
 				response_data_size = 64*2;
 				int pos = 6;
-				uint8_t *new_cashe = realloc(cashe, (hidStruct.expectedSize + 1) * sizeof(uint8_t));
-				cashe = new_cashe;
-				memmove(&cashe[pos + 1], &cashe[pos], (hidStruct.expectedSize - pos)*sizeof(uint8_t));
-				cashe[pos] = cashe[2];//add p1 as first element of data
+				uint8_t *new_cashe = realloc(cache, (hidStruct.expectedSize + 1) * sizeof(uint8_t));
+				cache = new_cashe;
+				memmove(&cache[pos + 1], &cache[pos], (hidStruct.expectedSize - pos)*sizeof(uint8_t));
+				cache[pos] = cache[2];//add p1 as first element of data
 				hidStruct.expectedSize += 1;
 				break;
 			case U2FISO7816_REGISTER:
@@ -255,10 +255,10 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				new_cashe[3] = 0x00;
 				new_cashe[4] = 0x00;
 				new_cashe[5] = 0x00;//00 05 00 00 00 00
-				memcpy(new_cashe + 6, cashe, hidStruct.expectedSize * sizeof(uint8_t));
+				memcpy(new_cashe + 6, cache, hidStruct.expectedSize * sizeof(uint8_t));
 				hidStruct.expectedSize += 6;
-				free(cashe);
-				cashe = new_cashe;
+				free(cache);
+				cache = new_cashe;
 
 			}
 			if(response_data_size == 0){
@@ -270,8 +270,7 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 			if(number_of_packets == 1){
 				uint8_t* send_data = malloc((hidStruct.expectedSize + 12) * sizeof(uint8_t) + sizeof(AID));
 				uint8_t uid[7];
-				uint8_t communications_failed_attemts = 0;
-				size_t send_data_size = Make_Packet_To_Send_NFC(cashe, hidStruct.expectedSize, send_data);
+				size_t send_data_size = Make_Packet_To_Send_NFC(cache, hidStruct.expectedSize, send_data);
 				while(1){////timeout needed cout-out (will not be multiplied with one inside in data exchange)
 					int uidSize = Read_Passive_Target(uid);
 					if (uidSize != 0){
@@ -289,7 +288,7 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 				uint8_t* send_data = malloc((MAX_DATA_PER_PN532_FRAME + 12 + 5) * sizeof(uint8_t) + sizeof(AID));
 				uint8_t uid[7];
 				for(int i = 0; i < number_of_packets; i++){
-					size_t send_data_size = Splice_And_Make_Packet_To_Send_NFC(cashe, hidStruct.expectedSize, send_data, i);
+					size_t send_data_size = Splice_And_Make_Packet_To_Send_NFC(cache, hidStruct.expectedSize, send_data, i);
 					while(1){//timeout needed cout-out (will not be multiplied with one inside in data exchange)
 						int uidSize = Read_Passive_Target(uid);
 						if (uidSize != 0){
@@ -350,7 +349,7 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t* recive)
 
 		USBD_CUSTOM_HID_SendReport(&hUsbDeviceFS, giga_packet, giga_packet_size * sizeof(uint8_t));
 		free(response_data);
-		free(cashe);
+		free(cache);
 	}
 
 	/* Start next USB packet transfer once data processing is completed */
@@ -434,16 +433,11 @@ size_t Make_Packet_To_Send(uint8_t* data, size_t data_size, uint8_t* output, siz
 }
 
 size_t Handle_Init(uint8_t* data, size_t data_size, uint8_t* response){
+	memcpy(response, data, 8 * sizeof(uint8_t));
 	HAL_RNG_GenerateRandomNumber(&RngHandle, response[8]);
 	HAL_RNG_GenerateRandomNumber(&RngHandle, response[9]);
 	HAL_RNG_GenerateRandomNumber(&RngHandle, response[10]);
 	HAL_RNG_GenerateRandomNumber(&RngHandle, response[11]);
-
-	memcpy(response, data, 8 * sizeof(uint8_t));
-	//response[8] = 0x10;
-	//response[9] = 0x11;
-	//response[10] = 0x12;
-	//response[11] = 0x13;
 	printf("channel %02X, %02X, %02X, %02X\r\n",response[8], response[9], response[10], response[11]);
 	response[12] = 2;//test change this parameters to mean something
 	response[13] = 2;
